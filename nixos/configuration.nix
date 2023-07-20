@@ -36,9 +36,8 @@
 
   # Enable the X11 windowing system.
   services.xserver.enable = true;
-  services.xserver.windowManager.dwm.enable = true;
-
-  
+  services.xserver.displayManager.lightdm.enable = false;
+  services.xserver.displayManager.startx.enable = true;
 
   # Configure keymap in X11
   # services.xserver.layout = "us";
@@ -63,23 +62,21 @@
       _1password-gui
       firefox
       tree
+      feh
       dwm
       st
       dmenu
       slstatus
+      syncthing
     ];
   };
 
   nixpkgs.overlays = [
-    (self: super: {
-      dwm = super.dwm.overrideAttrs (oldAttrs: rec {
-        patches = [
-          (super.fetchpatch {
-            url = "https://dwm.suckless.org/patches/vanitygaps/dwm-cfacts-vanitygaps-6.4_combo.diff";
-            sha256 = "1229bzidmvcwpbmxmyb5hk7s9hh3md8l60licffjirwjzcnlgn0j";
-          })
-        ];
-      });
+    (final: prev: {
+      dwm = prev.dwm.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/dwm; });
+      dmenu = prev.dmenu.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/dmenu; });
+      slstatus = prev.slstatus.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/slstatus; });
+      st = prev.st.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/st; });
     })
   ];
 
