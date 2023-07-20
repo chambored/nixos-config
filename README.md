@@ -19,7 +19,7 @@ This repository contains my personal [NixOS](https://nixos.org/) configuration, 
 Clone this repository to your local machine, and symbolic link the `configuration.nix` file to your `/etc/nixos/` directory.
 
 ```bash
-git clone https://github.com/username/reponame.git
+git clone https://github.com/chambored/nixos-config
 sudo ln -s /path/to/reponame/configuration.nix /etc/nixos/configuration.nix
 ```
 
