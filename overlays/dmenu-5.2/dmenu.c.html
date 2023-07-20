@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>dmenu.c - dmenu - dynamic menu
+</title>
+<link rel="icon" type="image/png" href="../favicon.png" />
+<link rel="alternate" type="application/atom+xml" title="dmenu Atom Feed" href="../atom.xml" />
+<link rel="alternate" type="application/atom+xml" title="dmenu Atom Feed (tags)" href="../tags.xml" />
+<link rel="stylesheet" type="text/css" href="../style.css" />
+</head>
+<body>
+<table><tr><td><a href="../../"><img src="../logo.png" alt="" width="32" height="32" /></a></td><td><h1>dmenu</h1><span class="desc">dynamic menu
+</span></td></tr><tr class="url"><td></td><td>git clone <a href="git://git.suckless.org/dmenu">git://git.suckless.org/dmenu</a></td></tr><tr><td></td><td>
+<a href="../log.html">Log</a> | <a href="../files.html">Files</a> | <a href="../refs.html">Refs</a> | <a href="../file/README.html">README</a> | <a href="../file/LICENSE.html">LICENSE</a></td></tr></table>
+<hr/>
+<div id="content">
+<p> dmenu.c (19542B)</p><hr/><pre id="blob">
+<a href="#l1" class="line" id="l1">      1</a> /* See LICENSE file for copyright and license details. */
+<a href="#l2" class="line" id="l2">      2</a> #include &lt;ctype.h&gt;
+<a href="#l3" class="line" id="l3">      3</a> #include &lt;locale.h&gt;
+<a href="#l4" class="line" id="l4">      4</a> #include &lt;stdio.h&gt;
+<a href="#l5" class="line" id="l5">      5</a> #include &lt;stdlib.h&gt;
+<a href="#l6" class="line" id="l6">      6</a> #include &lt;string.h&gt;
+<a href="#l7" class="line" id="l7">      7</a> #include &lt;strings.h&gt;
+<a href="#l8" class="line" id="l8">      8</a> #include &lt;time.h&gt;
+<a href="#l9" class="line" id="l9">      9</a> #include &lt;unistd.h&gt;
+<a href="#l10" class="line" id="l10">     10</a> 
+<a href="#l11" class="line" id="l11">     11</a> #include &lt;X11/Xlib.h&gt;
+<a href="#l12" class="line" id="l12">     12</a> #include &lt;X11/Xatom.h&gt;
+<a href="#l13" class="line" id="l13">     13</a> #include &lt;X11/Xutil.h&gt;
+<a href="#l14" class="line" id="l14">     14</a> #ifdef XINERAMA
+<a href="#l15" class="line" id="l15">     15</a> #include &lt;X11/extensions/Xinerama.h&gt;
+<a href="#l16" class="line" id="l16">     16</a> #endif
+<a href="#l17" class="line" id="l17">     17</a> #include &lt;X11/Xft/Xft.h&gt;
+<a href="#l18" class="line" id="l18">     18</a> 
+<a href="#l19" class="line" id="l19">     19</a> #include &quot;drw.h&quot;
+<a href="#l20" class="line" id="l20">     20</a> #include &quot;util.h&quot;
+<a href="#l21" class="line" id="l21">     21</a> 
+<a href="#l22" class="line" id="l22">     22</a> /* macros */
+<a href="#l23" class="line" id="l23">     23</a> #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
+<a href="#l24" class="line" id="l24">     24</a>                              * MAX(0, MIN((y)+(h),(r).y_org+(r).height) - MAX((y),(r).y_org)))
+<a href="#l25" class="line" id="l25">     25</a> #define LENGTH(X)             (sizeof X / sizeof X[0])
+<a href="#l26" class="line" id="l26">     26</a> #define TEXTW(X)              (drw_fontset_getwidth(drw, (X)) + lrpad)
+<a href="#l27" class="line" id="l27">     27</a> 
+<a href="#l28" class="line" id="l28">     28</a> /* enums */
+<a href="#l29" class="line" id="l29">     29</a> enum { SchemeNorm, SchemeSel, SchemeOut, SchemeLast }; /* color schemes */
+<a href="#l30" class="line" id="l30">     30</a> 
+<a href="#l31" class="line" id="l31">     31</a> struct item {
+<a href="#l32" class="line" id="l32">     32</a> 	char *text;
+<a href="#l33" class="line" id="l33">     33</a> 	struct item *left, *right;
+<a href="#l34" class="line" id="l34">     34</a> 	int out;
+<a href="#l35" class="line" id="l35">     35</a> };
+<a href="#l36" class="line" id="l36">     36</a> 
+<a href="#l37" class="line" id="l37">     37</a> static char text[BUFSIZ] = &quot;&quot;;
+<a href="#l38" class="line" id="l38">     38</a> static char *embed;
+<a href="#l39" class="line" id="l39">     39</a> static int bh, mw, mh;
+<a href="#l40" class="line" id="l40">     40</a> static int inputw = 0, promptw;
+<a href="#l41" class="line" id="l41">     41</a> static int lrpad; /* sum of left and right padding */
+<a href="#l42" class="line" id="l42">     42</a> static size_t cursor;
+<a href="#l43" class="line" id="l43">     43</a> static struct item *items = NULL;
+<a href="#l44" class="line" id="l44">     44</a> static struct item *matches, *matchend;
+<a href="#l45" class="line" id="l45">     45</a> static struct item *prev, *curr, *next, *sel;
+<a href="#l46" class="line" id="l46">     46</a> static int mon = -1, screen;
+<a href="#l47" class="line" id="l47">     47</a> 
+<a href="#l48" class="line" id="l48">     48</a> static Atom clip, utf8;
+<a href="#l49" class="line" id="l49">     49</a> static Display *dpy;
+<a href="#l50" class="line" id="l50">     50</a> static Window root, parentwin, win;
+<a href="#l51" class="line" id="l51">     51</a> static XIC xic;
+<a href="#l52" class="line" id="l52">     52</a> 
+<a href="#l53" class="line" id="l53">     53</a> static Drw *drw;
+<a href="#l54" class="line" id="l54">     54</a> static Clr *scheme[SchemeLast];
+<a href="#l55" class="line" id="l55">     55</a> 
+<a href="#l56" class="line" id="l56">     56</a> #include &quot;config.h&quot;
+<a href="#l57" class="line" id="l57">     57</a> 
+<a href="#l58" class="line" id="l58">     58</a> static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
+<a href="#l59" class="line" id="l59">     59</a> static char *(*fstrstr)(const char *, const char *) = strstr;
+<a href="#l60" class="line" id="l60">     60</a> 
+<a href="#l61" class="line" id="l61">     61</a> static unsigned int
+<a href="#l62" class="line" id="l62">     62</a> textw_clamp(const char *str, unsigned int n)
+<a href="#l63" class="line" id="l63">     63</a> {
+<a href="#l64" class="line" id="l64">     64</a> 	unsigned int w = drw_fontset_getwidth_clamp(drw, str, n) + lrpad;
+<a href="#l65" class="line" id="l65">     65</a> 	return MIN(w, n);
+<a href="#l66" class="line" id="l66">     66</a> }
+<a href="#l67" class="line" id="l67">     67</a> 
+<a href="#l68" class="line" id="l68">     68</a> static void
+<a href="#l69" class="line" id="l69">     69</a> appenditem(struct item *item, struct item **list, struct item **last)
+<a href="#l70" class="line" id="l70">     70</a> {
+<a href="#l71" class="line" id="l71">     71</a> 	if (*last)
+<a href="#l72" class="line" id="l72">     72</a> 		(*last)-&gt;right = item;
+<a href="#l73" class="line" id="l73">     73</a> 	else
+<a href="#l74" class="line" id="l74">     74</a> 		*list = item;
+<a href="#l75" class="line" id="l75">     75</a> 
+<a href="#l76" class="line" id="l76">     76</a> 	item-&gt;left = *last;
+<a href="#l77" class="line" id="l77">     77</a> 	item-&gt;right = NULL;
+<a href="#l78" class="line" id="l78">     78</a> 	*last = item;
+<a href="#l79" class="line" id="l79">     79</a> }
+<a href="#l80" class="line" id="l80">     80</a> 
+<a href="#l81" class="line" id="l81">     81</a> static void
+<a href="#l82" class="line" id="l82">     82</a> calcoffsets(void)
+<a href="#l83" class="line" id="l83">     83</a> {
+<a href="#l84" class="line" id="l84">     84</a> 	int i, n;
+<a href="#l85" class="line" id="l85">     85</a> 
+<a href="#l86" class="line" id="l86">     86</a> 	if (lines &gt; 0)
+<a href="#l87" class="line" id="l87">     87</a> 		n = lines * bh;
+<a href="#l88" class="line" id="l88">     88</a> 	else
+<a href="#l89" class="line" id="l89">     89</a> 		n = mw - (promptw + inputw + TEXTW(&quot;&lt;&quot;) + TEXTW(&quot;&gt;&quot;));
+<a href="#l90" class="line" id="l90">     90</a> 	/* calculate which items will begin the next page and previous page */
+<a href="#l91" class="line" id="l91">     91</a> 	for (i = 0, next = curr; next; next = next-&gt;right)
+<a href="#l92" class="line" id="l92">     92</a> 		if ((i += (lines &gt; 0) ? bh : textw_clamp(next-&gt;text, n)) &gt; n)
+<a href="#l93" class="line" id="l93">     93</a> 			break;
+<a href="#l94" class="line" id="l94">     94</a> 	for (i = 0, prev = curr; prev &amp;&amp; prev-&gt;left; prev = prev-&gt;left)
+<a href="#l95" class="line" id="l95">     95</a> 		if ((i += (lines &gt; 0) ? bh : textw_clamp(prev-&gt;left-&gt;text, n)) &gt; n)
+<a href="#l96" class="line" id="l96">     96</a> 			break;
+<a href="#l97" class="line" id="l97">     97</a> }
+<a href="#l98" class="line" id="l98">     98</a> 
+<a href="#l99" class="line" id="l99">     99</a> static void
+<a href="#l100" class="line" id="l100">    100</a> cleanup(void)
+<a href="#l101" class="line" id="l101">    101</a> {
+<a href="#l102" class="line" id="l102">    102</a> 	size_t i;
+<a href="#l103" class="line" id="l103">    103</a> 
+<a href="#l104" class="line" id="l104">    104</a> 	XUngrabKey(dpy, AnyKey, AnyModifier, root);
+<a href="#l105" class="line" id="l105">    105</a> 	for (i = 0; i &lt; SchemeLast; i++)
+<a href="#l106" class="line" id="l106">    106</a> 		free(scheme[i]);
+<a href="#l107" class="line" id="l107">    107</a> 	for (i = 0; items &amp;&amp; items[i].text; ++i)
+<a href="#l108" class="line" id="l108">    108</a> 		free(items[i].text);
+<a href="#l109" class="line" id="l109">    109</a> 	free(items);
+<a href="#l110" class="line" id="l110">    110</a> 	drw_free(drw);
+<a href="#l111" class="line" id="l111">    111</a> 	XSync(dpy, False);
+<a href="#l112" class="line" id="l112">    112</a> 	XCloseDisplay(dpy);
+<a href="#l113" class="line" id="l113">    113</a> }
+<a href="#l114" class="line" id="l114">    114</a> 
+<a href="#l115" class="line" id="l115">    115</a> static char *
+<a href="#l116" class="line" id="l116">    116</a> cistrstr(const char *h, const char *n)
+<a href="#l117" class="line" id="l117">    117</a> {
+<a href="#l118" class="line" id="l118">    118</a> 	size_t i;
+<a href="#l119" class="line" id="l119">    119</a> 
+<a href="#l120" class="line" id="l120">    120</a> 	if (!n[0])
+<a href="#l121" class="line" id="l121">    121</a> 		return (char *)h;
+<a href="#l122" class="line" id="l122">    122</a> 
+<a href="#l123" class="line" id="l123">    123</a> 	for (; *h; ++h) {
+<a href="#l124" class="line" id="l124">    124</a> 		for (i = 0; n[i] &amp;&amp; tolower((unsigned char)n[i]) ==
+<a href="#l125" class="line" id="l125">    125</a> 		            tolower((unsigned char)h[i]); ++i)
+<a href="#l126" class="line" id="l126">    126</a> 			;
+<a href="#l127" class="line" id="l127">    127</a> 		if (n[i] == &#39;\0&#39;)
+<a href="#l128" class="line" id="l128">    128</a> 			return (char *)h;
+<a href="#l129" class="line" id="l129">    129</a> 	}
+<a href="#l130" class="line" id="l130">    130</a> 	return NULL;
+<a href="#l131" class="line" id="l131">    131</a> }
+<a href="#l132" class="line" id="l132">    132</a> 
+<a href="#l133" class="line" id="l133">    133</a> static int
+<a href="#l134" class="line" id="l134">    134</a> drawitem(struct item *item, int x, int y, int w)
+<a href="#l135" class="line" id="l135">    135</a> {
+<a href="#l136" class="line" id="l136">    136</a> 	if (item == sel)
+<a href="#l137" class="line" id="l137">    137</a> 		drw_setscheme(drw, scheme[SchemeSel]);
+<a href="#l138" class="line" id="l138">    138</a> 	else if (item-&gt;out)
+<a href="#l139" class="line" id="l139">    139</a> 		drw_setscheme(drw, scheme[SchemeOut]);
+<a href="#l140" class="line" id="l140">    140</a> 	else
+<a href="#l141" class="line" id="l141">    141</a> 		drw_setscheme(drw, scheme[SchemeNorm]);
+<a href="#l142" class="line" id="l142">    142</a> 
+<a href="#l143" class="line" id="l143">    143</a> 	return drw_text(drw, x, y, w, bh, lrpad / 2, item-&gt;text, 0);
+<a href="#l144" class="line" id="l144">    144</a> }
+<a href="#l145" class="line" id="l145">    145</a> 
+<a href="#l146" class="line" id="l146">    146</a> static void
+<a href="#l147" class="line" id="l147">    147</a> drawmenu(void)
+<a href="#l148" class="line" id="l148">    148</a> {
+<a href="#l149" class="line" id="l149">    149</a> 	unsigned int curpos;
+<a href="#l150" class="line" id="l150">    150</a> 	struct item *item;
+<a href="#l151" class="line" id="l151">    151</a> 	int x = 0, y = 0, w;
+<a href="#l152" class="line" id="l152">    152</a> 
+<a href="#l153" class="line" id="l153">    153</a> 	drw_setscheme(drw, scheme[SchemeNorm]);
+<a href="#l154" class="line" id="l154">    154</a> 	drw_rect(drw, 0, 0, mw, mh, 1, 1);
+<a href="#l155" class="line" id="l155">    155</a> 
+<a href="#l156" class="line" id="l156">    156</a> 	if (prompt &amp;&amp; *prompt) {
+<a href="#l157" class="line" id="l157">    157</a> 		drw_setscheme(drw, scheme[SchemeSel]);
+<a href="#l158" class="line" id="l158">    158</a> 		x = drw_text(drw, x, 0, promptw, bh, lrpad / 2, prompt, 0);
+<a href="#l159" class="line" id="l159">    159</a> 	}
+<a href="#l160" class="line" id="l160">    160</a> 	/* draw input field */
+<a href="#l161" class="line" id="l161">    161</a> 	w = (lines &gt; 0 || !matches) ? mw - x : inputw;
+<a href="#l162" class="line" id="l162">    162</a> 	drw_setscheme(drw, scheme[SchemeNorm]);
+<a href="#l163" class="line" id="l163">    163</a> 	drw_text(drw, x, 0, w, bh, lrpad / 2, text, 0);
+<a href="#l164" class="line" id="l164">    164</a> 
+<a href="#l165" class="line" id="l165">    165</a> 	curpos = TEXTW(text) - TEXTW(&amp;text[cursor]);
+<a href="#l166" class="line" id="l166">    166</a> 	if ((curpos += lrpad / 2 - 1) &lt; w) {
+<a href="#l167" class="line" id="l167">    167</a> 		drw_setscheme(drw, scheme[SchemeNorm]);
+<a href="#l168" class="line" id="l168">    168</a> 		drw_rect(drw, x + curpos, 2, 2, bh - 4, 1, 0);
+<a href="#l169" class="line" id="l169">    169</a> 	}
+<a href="#l170" class="line" id="l170">    170</a> 
+<a href="#l171" class="line" id="l171">    171</a> 	if (lines &gt; 0) {
+<a href="#l172" class="line" id="l172">    172</a> 		/* draw vertical list */
+<a href="#l173" class="line" id="l173">    173</a> 		for (item = curr; item != next; item = item-&gt;right)
+<a href="#l174" class="line" id="l174">    174</a> 			drawitem(item, x, y += bh, mw - x);
+<a href="#l175" class="line" id="l175">    175</a> 	} else if (matches) {
+<a href="#l176" class="line" id="l176">    176</a> 		/* draw horizontal list */
+<a href="#l177" class="line" id="l177">    177</a> 		x += inputw;
+<a href="#l178" class="line" id="l178">    178</a> 		w = TEXTW(&quot;&lt;&quot;);
+<a href="#l179" class="line" id="l179">    179</a> 		if (curr-&gt;left) {
+<a href="#l180" class="line" id="l180">    180</a> 			drw_setscheme(drw, scheme[SchemeNorm]);
+<a href="#l181" class="line" id="l181">    181</a> 			drw_text(drw, x, 0, w, bh, lrpad / 2, &quot;&lt;&quot;, 0);
+<a href="#l182" class="line" id="l182">    182</a> 		}
+<a href="#l183" class="line" id="l183">    183</a> 		x += w;
+<a href="#l184" class="line" id="l184">    184</a> 		for (item = curr; item != next; item = item-&gt;right)
+<a href="#l185" class="line" id="l185">    185</a> 			x = drawitem(item, x, 0, textw_clamp(item-&gt;text, mw - x - TEXTW(&quot;&gt;&quot;)));
+<a href="#l186" class="line" id="l186">    186</a> 		if (next) {
+<a href="#l187" class="line" id="l187">    187</a> 			w = TEXTW(&quot;&gt;&quot;);
+<a href="#l188" class="line" id="l188">    188</a> 			drw_setscheme(drw, scheme[SchemeNorm]);
+<a href="#l189" class="line" id="l189">    189</a> 			drw_text(drw, mw - w, 0, w, bh, lrpad / 2, &quot;&gt;&quot;, 0);
+<a href="#l190" class="line" id="l190">    190</a> 		}
+<a href="#l191" class="line" id="l191">    191</a> 	}
+<a href="#l192" class="line" id="l192">    192</a> 	drw_map(drw, win, 0, 0, mw, mh);
+<a href="#l193" class="line" id="l193">    193</a> }
+<a href="#l194" class="line" id="l194">    194</a> 
+<a href="#l195" class="line" id="l195">    195</a> static void
+<a href="#l196" class="line" id="l196">    196</a> grabfocus(void)
+<a href="#l197" class="line" id="l197">    197</a> {
+<a href="#l198" class="line" id="l198">    198</a> 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 10000000  };
+<a href="#l199" class="line" id="l199">    199</a> 	Window focuswin;
+<a href="#l200" class="line" id="l200">    200</a> 	int i, revertwin;
+<a href="#l201" class="line" id="l201">    201</a> 
+<a href="#l202" class="line" id="l202">    202</a> 	for (i = 0; i &lt; 100; ++i) {
+<a href="#l203" class="line" id="l203">    203</a> 		XGetInputFocus(dpy, &amp;focuswin, &amp;revertwin);
+<a href="#l204" class="line" id="l204">    204</a> 		if (focuswin == win)
+<a href="#l205" class="line" id="l205">    205</a> 			return;
+<a href="#l206" class="line" id="l206">    206</a> 		XSetInputFocus(dpy, win, RevertToParent, CurrentTime);
+<a href="#l207" class="line" id="l207">    207</a> 		nanosleep(&amp;ts, NULL);
+<a href="#l208" class="line" id="l208">    208</a> 	}
+<a href="#l209" class="line" id="l209">    209</a> 	die(&quot;cannot grab focus&quot;);
+<a href="#l210" class="line" id="l210">    210</a> }
+<a href="#l211" class="line" id="l211">    211</a> 
+<a href="#l212" class="line" id="l212">    212</a> static void
+<a href="#l213" class="line" id="l213">    213</a> grabkeyboard(void)
+<a href="#l214" class="line" id="l214">    214</a> {
+<a href="#l215" class="line" id="l215">    215</a> 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1000000  };
+<a href="#l216" class="line" id="l216">    216</a> 	int i;
+<a href="#l217" class="line" id="l217">    217</a> 
+<a href="#l218" class="line" id="l218">    218</a> 	if (embed)
+<a href="#l219" class="line" id="l219">    219</a> 		return;
+<a href="#l220" class="line" id="l220">    220</a> 	/* try to grab keyboard, we may have to wait for another process to ungrab */
+<a href="#l221" class="line" id="l221">    221</a> 	for (i = 0; i &lt; 1000; i++) {
+<a href="#l222" class="line" id="l222">    222</a> 		if (XGrabKeyboard(dpy, DefaultRootWindow(dpy), True, GrabModeAsync,
+<a href="#l223" class="line" id="l223">    223</a> 		                  GrabModeAsync, CurrentTime) == GrabSuccess)
+<a href="#l224" class="line" id="l224">    224</a> 			return;
+<a href="#l225" class="line" id="l225">    225</a> 		nanosleep(&amp;ts, NULL);
+<a href="#l226" class="line" id="l226">    226</a> 	}
+<a href="#l227" class="line" id="l227">    227</a> 	die(&quot;cannot grab keyboard&quot;);
+<a href="#l228" class="line" id="l228">    228</a> }
+<a href="#l229" class="line" id="l229">    229</a> 
+<a href="#l230" class="line" id="l230">    230</a> static void
+<a href="#l231" class="line" id="l231">    231</a> match(void)
+<a href="#l232" class="line" id="l232">    232</a> {
+<a href="#l233" class="line" id="l233">    233</a> 	static char **tokv = NULL;
+<a href="#l234" class="line" id="l234">    234</a> 	static int tokn = 0;
+<a href="#l235" class="line" id="l235">    235</a> 
+<a href="#l236" class="line" id="l236">    236</a> 	char buf[sizeof text], *s;
+<a href="#l237" class="line" id="l237">    237</a> 	int i, tokc = 0;
+<a href="#l238" class="line" id="l238">    238</a> 	size_t len, textsize;
+<a href="#l239" class="line" id="l239">    239</a> 	struct item *item, *lprefix, *lsubstr, *prefixend, *substrend;
+<a href="#l240" class="line" id="l240">    240</a> 
+<a href="#l241" class="line" id="l241">    241</a> 	strcpy(buf, text);
+<a href="#l242" class="line" id="l242">    242</a> 	/* separate input text into tokens to be matched individually */
+<a href="#l243" class="line" id="l243">    243</a> 	for (s = strtok(buf, &quot; &quot;); s; tokv[tokc - 1] = s, s = strtok(NULL, &quot; &quot;))
+<a href="#l244" class="line" id="l244">    244</a> 		if (++tokc &gt; tokn &amp;&amp; !(tokv = realloc(tokv, ++tokn * sizeof *tokv)))
+<a href="#l245" class="line" id="l245">    245</a> 			die(&quot;cannot realloc %zu bytes:&quot;, tokn * sizeof *tokv);
+<a href="#l246" class="line" id="l246">    246</a> 	len = tokc ? strlen(tokv[0]) : 0;
+<a href="#l247" class="line" id="l247">    247</a> 
+<a href="#l248" class="line" id="l248">    248</a> 	matches = lprefix = lsubstr = matchend = prefixend = substrend = NULL;
+<a href="#l249" class="line" id="l249">    249</a> 	textsize = strlen(text) + 1;
+<a href="#l250" class="line" id="l250">    250</a> 	for (item = items; item &amp;&amp; item-&gt;text; item++) {
+<a href="#l251" class="line" id="l251">    251</a> 		for (i = 0; i &lt; tokc; i++)
+<a href="#l252" class="line" id="l252">    252</a> 			if (!fstrstr(item-&gt;text, tokv[i]))
+<a href="#l253" class="line" id="l253">    253</a> 				break;
+<a href="#l254" class="line" id="l254">    254</a> 		if (i != tokc) /* not all tokens match */
+<a href="#l255" class="line" id="l255">    255</a> 			continue;
+<a href="#l256" class="line" id="l256">    256</a> 		/* exact matches go first, then prefixes, then substrings */
+<a href="#l257" class="line" id="l257">    257</a> 		if (!tokc || !fstrncmp(text, item-&gt;text, textsize))
+<a href="#l258" class="line" id="l258">    258</a> 			appenditem(item, &amp;matches, &amp;matchend);
+<a href="#l259" class="line" id="l259">    259</a> 		else if (!fstrncmp(tokv[0], item-&gt;text, len))
+<a href="#l260" class="line" id="l260">    260</a> 			appenditem(item, &amp;lprefix, &amp;prefixend);
+<a href="#l261" class="line" id="l261">    261</a> 		else
+<a href="#l262" class="line" id="l262">    262</a> 			appenditem(item, &amp;lsubstr, &amp;substrend);
+<a href="#l263" class="line" id="l263">    263</a> 	}
+<a href="#l264" class="line" id="l264">    264</a> 	if (lprefix) {
+<a href="#l265" class="line" id="l265">    265</a> 		if (matches) {
+<a href="#l266" class="line" id="l266">    266</a> 			matchend-&gt;right = lprefix;
+<a href="#l267" class="line" id="l267">    267</a> 			lprefix-&gt;left = matchend;
+<a href="#l268" class="line" id="l268">    268</a> 		} else
+<a href="#l269" class="line" id="l269">    269</a> 			matches = lprefix;
+<a href="#l270" class="line" id="l270">    270</a> 		matchend = prefixend;
+<a href="#l271" class="line" id="l271">    271</a> 	}
+<a href="#l272" class="line" id="l272">    272</a> 	if (lsubstr) {
+<a href="#l273" class="line" id="l273">    273</a> 		if (matches) {
+<a href="#l274" class="line" id="l274">    274</a> 			matchend-&gt;right = lsubstr;
+<a href="#l275" class="line" id="l275">    275</a> 			lsubstr-&gt;left = matchend;
+<a href="#l276" class="line" id="l276">    276</a> 		} else
+<a href="#l277" class="line" id="l277">    277</a> 			matches = lsubstr;
+<a href="#l278" class="line" id="l278">    278</a> 		matchend = substrend;
+<a href="#l279" class="line" id="l279">    279</a> 	}
+<a href="#l280" class="line" id="l280">    280</a> 	curr = sel = matches;
+<a href="#l281" class="line" id="l281">    281</a> 	calcoffsets();
+<a href="#l282" class="line" id="l282">    282</a> }
+<a href="#l283" class="line" id="l283">    283</a> 
+<a href="#l284" class="line" id="l284">    284</a> static void
+<a href="#l285" class="line" id="l285">    285</a> insert(const char *str, ssize_t n)
+<a href="#l286" class="line" id="l286">    286</a> {
+<a href="#l287" class="line" id="l287">    287</a> 	if (strlen(text) + n &gt; sizeof text - 1)
+<a href="#l288" class="line" id="l288">    288</a> 		return;
+<a href="#l289" class="line" id="l289">    289</a> 	/* move existing text out of the way, insert new text, and update cursor */
+<a href="#l290" class="line" id="l290">    290</a> 	memmove(&amp;text[cursor + n], &amp;text[cursor], sizeof text - cursor - MAX(n, 0));
+<a href="#l291" class="line" id="l291">    291</a> 	if (n &gt; 0)
+<a href="#l292" class="line" id="l292">    292</a> 		memcpy(&amp;text[cursor], str, n);
+<a href="#l293" class="line" id="l293">    293</a> 	cursor += n;
+<a href="#l294" class="line" id="l294">    294</a> 	match();
+<a href="#l295" class="line" id="l295">    295</a> }
+<a href="#l296" class="line" id="l296">    296</a> 
+<a href="#l297" class="line" id="l297">    297</a> static size_t
+<a href="#l298" class="line" id="l298">    298</a> nextrune(int inc)
+<a href="#l299" class="line" id="l299">    299</a> {
+<a href="#l300" class="line" id="l300">    300</a> 	ssize_t n;
+<a href="#l301" class="line" id="l301">    301</a> 
+<a href="#l302" class="line" id="l302">    302</a> 	/* return location of next utf8 rune in the given direction (+1 or -1) */
+<a href="#l303" class="line" id="l303">    303</a> 	for (n = cursor + inc; n + inc &gt;= 0 &amp;&amp; (text[n] &amp; 0xc0) == 0x80; n += inc)
+<a href="#l304" class="line" id="l304">    304</a> 		;
+<a href="#l305" class="line" id="l305">    305</a> 	return n;
+<a href="#l306" class="line" id="l306">    306</a> }
+<a href="#l307" class="line" id="l307">    307</a> 
+<a href="#l308" class="line" id="l308">    308</a> static void
+<a href="#l309" class="line" id="l309">    309</a> movewordedge(int dir)
+<a href="#l310" class="line" id="l310">    310</a> {
+<a href="#l311" class="line" id="l311">    311</a> 	if (dir &lt; 0) { /* move cursor to the start of the word*/
+<a href="#l312" class="line" id="l312">    312</a> 		while (cursor &gt; 0 &amp;&amp; strchr(worddelimiters, text[nextrune(-1)]))
+<a href="#l313" class="line" id="l313">    313</a> 			cursor = nextrune(-1);
+<a href="#l314" class="line" id="l314">    314</a> 		while (cursor &gt; 0 &amp;&amp; !strchr(worddelimiters, text[nextrune(-1)]))
+<a href="#l315" class="line" id="l315">    315</a> 			cursor = nextrune(-1);
+<a href="#l316" class="line" id="l316">    316</a> 	} else { /* move cursor to the end of the word */
+<a href="#l317" class="line" id="l317">    317</a> 		while (text[cursor] &amp;&amp; strchr(worddelimiters, text[cursor]))
+<a href="#l318" class="line" id="l318">    318</a> 			cursor = nextrune(+1);
+<a href="#l319" class="line" id="l319">    319</a> 		while (text[cursor] &amp;&amp; !strchr(worddelimiters, text[cursor]))
+<a href="#l320" class="line" id="l320">    320</a> 			cursor = nextrune(+1);
+<a href="#l321" class="line" id="l321">    321</a> 	}
+<a href="#l322" class="line" id="l322">    322</a> }
+<a href="#l323" class="line" id="l323">    323</a> 
+<a href="#l324" class="line" id="l324">    324</a> static void
+<a href="#l325" class="line" id="l325">    325</a> keypress(XKeyEvent *ev)
+<a href="#l326" class="line" id="l326">    326</a> {
+<a href="#l327" class="line" id="l327">    327</a> 	char buf[64];
+<a href="#l328" class="line" id="l328">    328</a> 	int len;
+<a href="#l329" class="line" id="l329">    329</a> 	KeySym ksym = NoSymbol;
+<a href="#l330" class="line" id="l330">    330</a> 	Status status;
+<a href="#l331" class="line" id="l331">    331</a> 
+<a href="#l332" class="line" id="l332">    332</a> 	len = XmbLookupString(xic, ev, buf, sizeof buf, &amp;ksym, &amp;status);
+<a href="#l333" class="line" id="l333">    333</a> 	switch (status) {
+<a href="#l334" class="line" id="l334">    334</a> 	default: /* XLookupNone, XBufferOverflow */
+<a href="#l335" class="line" id="l335">    335</a> 		return;
+<a href="#l336" class="line" id="l336">    336</a> 	case XLookupChars: /* composed string from input method */
+<a href="#l337" class="line" id="l337">    337</a> 		goto insert;
+<a href="#l338" class="line" id="l338">    338</a> 	case XLookupKeySym:
+<a href="#l339" class="line" id="l339">    339</a> 	case XLookupBoth: /* a KeySym and a string are returned: use keysym */
+<a href="#l340" class="line" id="l340">    340</a> 		break;
+<a href="#l341" class="line" id="l341">    341</a> 	}
+<a href="#l342" class="line" id="l342">    342</a> 
+<a href="#l343" class="line" id="l343">    343</a> 	if (ev-&gt;state &amp; ControlMask) {
+<a href="#l344" class="line" id="l344">    344</a> 		switch(ksym) {
+<a href="#l345" class="line" id="l345">    345</a> 		case XK_a: ksym = XK_Home;      break;
+<a href="#l346" class="line" id="l346">    346</a> 		case XK_b: ksym = XK_Left;      break;
+<a href="#l347" class="line" id="l347">    347</a> 		case XK_c: ksym = XK_Escape;    break;
+<a href="#l348" class="line" id="l348">    348</a> 		case XK_d: ksym = XK_Delete;    break;
+<a href="#l349" class="line" id="l349">    349</a> 		case XK_e: ksym = XK_End;       break;
+<a href="#l350" class="line" id="l350">    350</a> 		case XK_f: ksym = XK_Right;     break;
+<a href="#l351" class="line" id="l351">    351</a> 		case XK_g: ksym = XK_Escape;    break;
+<a href="#l352" class="line" id="l352">    352</a> 		case XK_h: ksym = XK_BackSpace; break;
+<a href="#l353" class="line" id="l353">    353</a> 		case XK_i: ksym = XK_Tab;       break;
+<a href="#l354" class="line" id="l354">    354</a> 		case XK_j: /* fallthrough */
+<a href="#l355" class="line" id="l355">    355</a> 		case XK_J: /* fallthrough */
+<a href="#l356" class="line" id="l356">    356</a> 		case XK_m: /* fallthrough */
+<a href="#l357" class="line" id="l357">    357</a> 		case XK_M: ksym = XK_Return; ev-&gt;state &amp;= ~ControlMask; break;
+<a href="#l358" class="line" id="l358">    358</a> 		case XK_n: ksym = XK_Down;      break;
+<a href="#l359" class="line" id="l359">    359</a> 		case XK_p: ksym = XK_Up;        break;
+<a href="#l360" class="line" id="l360">    360</a> 
+<a href="#l361" class="line" id="l361">    361</a> 		case XK_k: /* delete right */
+<a href="#l362" class="line" id="l362">    362</a> 			text[cursor] = &#39;\0&#39;;
+<a href="#l363" class="line" id="l363">    363</a> 			match();
+<a href="#l364" class="line" id="l364">    364</a> 			break;
+<a href="#l365" class="line" id="l365">    365</a> 		case XK_u: /* delete left */
+<a href="#l366" class="line" id="l366">    366</a> 			insert(NULL, 0 - cursor);
+<a href="#l367" class="line" id="l367">    367</a> 			break;
+<a href="#l368" class="line" id="l368">    368</a> 		case XK_w: /* delete word */
+<a href="#l369" class="line" id="l369">    369</a> 			while (cursor &gt; 0 &amp;&amp; strchr(worddelimiters, text[nextrune(-1)]))
+<a href="#l370" class="line" id="l370">    370</a> 				insert(NULL, nextrune(-1) - cursor);
+<a href="#l371" class="line" id="l371">    371</a> 			while (cursor &gt; 0 &amp;&amp; !strchr(worddelimiters, text[nextrune(-1)]))
+<a href="#l372" class="line" id="l372">    372</a> 				insert(NULL, nextrune(-1) - cursor);
+<a href="#l373" class="line" id="l373">    373</a> 			break;
+<a href="#l374" class="line" id="l374">    374</a> 		case XK_y: /* paste selection */
+<a href="#l375" class="line" id="l375">    375</a> 		case XK_Y:
+<a href="#l376" class="line" id="l376">    376</a> 			XConvertSelection(dpy, (ev-&gt;state &amp; ShiftMask) ? clip : XA_PRIMARY,
+<a href="#l377" class="line" id="l377">    377</a> 			                  utf8, utf8, win, CurrentTime);
+<a href="#l378" class="line" id="l378">    378</a> 			return;
+<a href="#l379" class="line" id="l379">    379</a> 		case XK_Left:
+<a href="#l380" class="line" id="l380">    380</a> 		case XK_KP_Left:
+<a href="#l381" class="line" id="l381">    381</a> 			movewordedge(-1);
+<a href="#l382" class="line" id="l382">    382</a> 			goto draw;
+<a href="#l383" class="line" id="l383">    383</a> 		case XK_Right:
+<a href="#l384" class="line" id="l384">    384</a> 		case XK_KP_Right:
+<a href="#l385" class="line" id="l385">    385</a> 			movewordedge(+1);
+<a href="#l386" class="line" id="l386">    386</a> 			goto draw;
+<a href="#l387" class="line" id="l387">    387</a> 		case XK_Return:
+<a href="#l388" class="line" id="l388">    388</a> 		case XK_KP_Enter:
+<a href="#l389" class="line" id="l389">    389</a> 			break;
+<a href="#l390" class="line" id="l390">    390</a> 		case XK_bracketleft:
+<a href="#l391" class="line" id="l391">    391</a> 			cleanup();
+<a href="#l392" class="line" id="l392">    392</a> 			exit(1);
+<a href="#l393" class="line" id="l393">    393</a> 		default:
+<a href="#l394" class="line" id="l394">    394</a> 			return;
+<a href="#l395" class="line" id="l395">    395</a> 		}
+<a href="#l396" class="line" id="l396">    396</a> 	} else if (ev-&gt;state &amp; Mod1Mask) {
+<a href="#l397" class="line" id="l397">    397</a> 		switch(ksym) {
+<a href="#l398" class="line" id="l398">    398</a> 		case XK_b:
+<a href="#l399" class="line" id="l399">    399</a> 			movewordedge(-1);
+<a href="#l400" class="line" id="l400">    400</a> 			goto draw;
+<a href="#l401" class="line" id="l401">    401</a> 		case XK_f:
+<a href="#l402" class="line" id="l402">    402</a> 			movewordedge(+1);
+<a href="#l403" class="line" id="l403">    403</a> 			goto draw;
+<a href="#l404" class="line" id="l404">    404</a> 		case XK_g: ksym = XK_Home;  break;
+<a href="#l405" class="line" id="l405">    405</a> 		case XK_G: ksym = XK_End;   break;
+<a href="#l406" class="line" id="l406">    406</a> 		case XK_h: ksym = XK_Up;    break;
+<a href="#l407" class="line" id="l407">    407</a> 		case XK_j: ksym = XK_Next;  break;
+<a href="#l408" class="line" id="l408">    408</a> 		case XK_k: ksym = XK_Prior; break;
+<a href="#l409" class="line" id="l409">    409</a> 		case XK_l: ksym = XK_Down;  break;
+<a href="#l410" class="line" id="l410">    410</a> 		default:
+<a href="#l411" class="line" id="l411">    411</a> 			return;
+<a href="#l412" class="line" id="l412">    412</a> 		}
+<a href="#l413" class="line" id="l413">    413</a> 	}
+<a href="#l414" class="line" id="l414">    414</a> 
+<a href="#l415" class="line" id="l415">    415</a> 	switch(ksym) {
+<a href="#l416" class="line" id="l416">    416</a> 	default:
+<a href="#l417" class="line" id="l417">    417</a> insert:
+<a href="#l418" class="line" id="l418">    418</a> 		if (!iscntrl((unsigned char)*buf))
+<a href="#l419" class="line" id="l419">    419</a> 			insert(buf, len);
+<a href="#l420" class="line" id="l420">    420</a> 		break;
+<a href="#l421" class="line" id="l421">    421</a> 	case XK_Delete:
+<a href="#l422" class="line" id="l422">    422</a> 	case XK_KP_Delete:
+<a href="#l423" class="line" id="l423">    423</a> 		if (text[cursor] == &#39;\0&#39;)
+<a href="#l424" class="line" id="l424">    424</a> 			return;
+<a href="#l425" class="line" id="l425">    425</a> 		cursor = nextrune(+1);
+<a href="#l426" class="line" id="l426">    426</a> 		/* fallthrough */
+<a href="#l427" class="line" id="l427">    427</a> 	case XK_BackSpace:
+<a href="#l428" class="line" id="l428">    428</a> 		if (cursor == 0)
+<a href="#l429" class="line" id="l429">    429</a> 			return;
+<a href="#l430" class="line" id="l430">    430</a> 		insert(NULL, nextrune(-1) - cursor);
+<a href="#l431" class="line" id="l431">    431</a> 		break;
+<a href="#l432" class="line" id="l432">    432</a> 	case XK_End:
+<a href="#l433" class="line" id="l433">    433</a> 	case XK_KP_End:
+<a href="#l434" class="line" id="l434">    434</a> 		if (text[cursor] != &#39;\0&#39;) {
+<a href="#l435" class="line" id="l435">    435</a> 			cursor = strlen(text);
+<a href="#l436" class="line" id="l436">    436</a> 			break;
+<a href="#l437" class="line" id="l437">    437</a> 		}
+<a href="#l438" class="line" id="l438">    438</a> 		if (next) {
+<a href="#l439" class="line" id="l439">    439</a> 			/* jump to end of list and position items in reverse */
+<a href="#l440" class="line" id="l440">    440</a> 			curr = matchend;
+<a href="#l441" class="line" id="l441">    441</a> 			calcoffsets();
+<a href="#l442" class="line" id="l442">    442</a> 			curr = prev;
+<a href="#l443" class="line" id="l443">    443</a> 			calcoffsets();
+<a href="#l444" class="line" id="l444">    444</a> 			while (next &amp;&amp; (curr = curr-&gt;right))
+<a href="#l445" class="line" id="l445">    445</a> 				calcoffsets();
+<a href="#l446" class="line" id="l446">    446</a> 		}
+<a href="#l447" class="line" id="l447">    447</a> 		sel = matchend;
+<a href="#l448" class="line" id="l448">    448</a> 		break;
+<a href="#l449" class="line" id="l449">    449</a> 	case XK_Escape:
+<a href="#l450" class="line" id="l450">    450</a> 		cleanup();
+<a href="#l451" class="line" id="l451">    451</a> 		exit(1);
+<a href="#l452" class="line" id="l452">    452</a> 	case XK_Home:
+<a href="#l453" class="line" id="l453">    453</a> 	case XK_KP_Home:
+<a href="#l454" class="line" id="l454">    454</a> 		if (sel == matches) {
+<a href="#l455" class="line" id="l455">    455</a> 			cursor = 0;
+<a href="#l456" class="line" id="l456">    456</a> 			break;
+<a href="#l457" class="line" id="l457">    457</a> 		}
+<a href="#l458" class="line" id="l458">    458</a> 		sel = curr = matches;
+<a href="#l459" class="line" id="l459">    459</a> 		calcoffsets();
+<a href="#l460" class="line" id="l460">    460</a> 		break;
+<a href="#l461" class="line" id="l461">    461</a> 	case XK_Left:
+<a href="#l462" class="line" id="l462">    462</a> 	case XK_KP_Left:
+<a href="#l463" class="line" id="l463">    463</a> 		if (cursor &gt; 0 &amp;&amp; (!sel || !sel-&gt;left || lines &gt; 0)) {
+<a href="#l464" class="line" id="l464">    464</a> 			cursor = nextrune(-1);
+<a href="#l465" class="line" id="l465">    465</a> 			break;
+<a href="#l466" class="line" id="l466">    466</a> 		}
+<a href="#l467" class="line" id="l467">    467</a> 		if (lines &gt; 0)
+<a href="#l468" class="line" id="l468">    468</a> 			return;
+<a href="#l469" class="line" id="l469">    469</a> 		/* fallthrough */
+<a href="#l470" class="line" id="l470">    470</a> 	case XK_Up:
+<a href="#l471" class="line" id="l471">    471</a> 	case XK_KP_Up:
+<a href="#l472" class="line" id="l472">    472</a> 		if (sel &amp;&amp; sel-&gt;left &amp;&amp; (sel = sel-&gt;left)-&gt;right == curr) {
+<a href="#l473" class="line" id="l473">    473</a> 			curr = prev;
+<a href="#l474" class="line" id="l474">    474</a> 			calcoffsets();
+<a href="#l475" class="line" id="l475">    475</a> 		}
+<a href="#l476" class="line" id="l476">    476</a> 		break;
+<a href="#l477" class="line" id="l477">    477</a> 	case XK_Next:
+<a href="#l478" class="line" id="l478">    478</a> 	case XK_KP_Next:
+<a href="#l479" class="line" id="l479">    479</a> 		if (!next)
+<a href="#l480" class="line" id="l480">    480</a> 			return;
+<a href="#l481" class="line" id="l481">    481</a> 		sel = curr = next;
+<a href="#l482" class="line" id="l482">    482</a> 		calcoffsets();
+<a href="#l483" class="line" id="l483">    483</a> 		break;
+<a href="#l484" class="line" id="l484">    484</a> 	case XK_Prior:
+<a href="#l485" class="line" id="l485">    485</a> 	case XK_KP_Prior:
+<a href="#l486" class="line" id="l486">    486</a> 		if (!prev)
+<a href="#l487" class="line" id="l487">    487</a> 			return;
+<a href="#l488" class="line" id="l488">    488</a> 		sel = curr = prev;
+<a href="#l489" class="line" id="l489">    489</a> 		calcoffsets();
+<a href="#l490" class="line" id="l490">    490</a> 		break;
+<a href="#l491" class="line" id="l491">    491</a> 	case XK_Return:
+<a href="#l492" class="line" id="l492">    492</a> 	case XK_KP_Enter:
+<a href="#l493" class="line" id="l493">    493</a> 		puts((sel &amp;&amp; !(ev-&gt;state &amp; ShiftMask)) ? sel-&gt;text : text);
+<a href="#l494" class="line" id="l494">    494</a> 		if (!(ev-&gt;state &amp; ControlMask)) {
+<a href="#l495" class="line" id="l495">    495</a> 			cleanup();
+<a href="#l496" class="line" id="l496">    496</a> 			exit(0);
+<a href="#l497" class="line" id="l497">    497</a> 		}
+<a href="#l498" class="line" id="l498">    498</a> 		if (sel)
+<a href="#l499" class="line" id="l499">    499</a> 			sel-&gt;out = 1;
+<a href="#l500" class="line" id="l500">    500</a> 		break;
+<a href="#l501" class="line" id="l501">    501</a> 	case XK_Right:
+<a href="#l502" class="line" id="l502">    502</a> 	case XK_KP_Right:
+<a href="#l503" class="line" id="l503">    503</a> 		if (text[cursor] != &#39;\0&#39;) {
+<a href="#l504" class="line" id="l504">    504</a> 			cursor = nextrune(+1);
+<a href="#l505" class="line" id="l505">    505</a> 			break;
+<a href="#l506" class="line" id="l506">    506</a> 		}
+<a href="#l507" class="line" id="l507">    507</a> 		if (lines &gt; 0)
+<a href="#l508" class="line" id="l508">    508</a> 			return;
+<a href="#l509" class="line" id="l509">    509</a> 		/* fallthrough */
+<a href="#l510" class="line" id="l510">    510</a> 	case XK_Down:
+<a href="#l511" class="line" id="l511">    511</a> 	case XK_KP_Down:
+<a href="#l512" class="line" id="l512">    512</a> 		if (sel &amp;&amp; sel-&gt;right &amp;&amp; (sel = sel-&gt;right) == next) {
+<a href="#l513" class="line" id="l513">    513</a> 			curr = next;
+<a href="#l514" class="line" id="l514">    514</a> 			calcoffsets();
+<a href="#l515" class="line" id="l515">    515</a> 		}
+<a href="#l516" class="line" id="l516">    516</a> 		break;
+<a href="#l517" class="line" id="l517">    517</a> 	case XK_Tab:
+<a href="#l518" class="line" id="l518">    518</a> 		if (!sel)
+<a href="#l519" class="line" id="l519">    519</a> 			return;
+<a href="#l520" class="line" id="l520">    520</a> 		cursor = strnlen(sel-&gt;text, sizeof text - 1);
+<a href="#l521" class="line" id="l521">    521</a> 		memcpy(text, sel-&gt;text, cursor);
+<a href="#l522" class="line" id="l522">    522</a> 		text[cursor] = &#39;\0&#39;;
+<a href="#l523" class="line" id="l523">    523</a> 		match();
+<a href="#l524" class="line" id="l524">    524</a> 		break;
+<a href="#l525" class="line" id="l525">    525</a> 	}
+<a href="#l526" class="line" id="l526">    526</a> 
+<a href="#l527" class="line" id="l527">    527</a> draw:
+<a href="#l528" class="line" id="l528">    528</a> 	drawmenu();
+<a href="#l529" class="line" id="l529">    529</a> }
+<a href="#l530" class="line" id="l530">    530</a> 
+<a href="#l531" class="line" id="l531">    531</a> static void
+<a href="#l532" class="line" id="l532">    532</a> paste(void)
+<a href="#l533" class="line" id="l533">    533</a> {
+<a href="#l534" class="line" id="l534">    534</a> 	char *p, *q;
+<a href="#l535" class="line" id="l535">    535</a> 	int di;
+<a href="#l536" class="line" id="l536">    536</a> 	unsigned long dl;
+<a href="#l537" class="line" id="l537">    537</a> 	Atom da;
+<a href="#l538" class="line" id="l538">    538</a> 
+<a href="#l539" class="line" id="l539">    539</a> 	/* we have been given the current selection, now insert it into input */
+<a href="#l540" class="line" id="l540">    540</a> 	if (XGetWindowProperty(dpy, win, utf8, 0, (sizeof text / 4) + 1, False,
+<a href="#l541" class="line" id="l541">    541</a> 	                   utf8, &amp;da, &amp;di, &amp;dl, &amp;dl, (unsigned char **)&amp;p)
+<a href="#l542" class="line" id="l542">    542</a> 	    == Success &amp;&amp; p) {
+<a href="#l543" class="line" id="l543">    543</a> 		insert(p, (q = strchr(p, &#39;\n&#39;)) ? q - p : (ssize_t)strlen(p));
+<a href="#l544" class="line" id="l544">    544</a> 		XFree(p);
+<a href="#l545" class="line" id="l545">    545</a> 	}
+<a href="#l546" class="line" id="l546">    546</a> 	drawmenu();
+<a href="#l547" class="line" id="l547">    547</a> }
+<a href="#l548" class="line" id="l548">    548</a> 
+<a href="#l549" class="line" id="l549">    549</a> static void
+<a href="#l550" class="line" id="l550">    550</a> readstdin(void)
+<a href="#l551" class="line" id="l551">    551</a> {
+<a href="#l552" class="line" id="l552">    552</a> 	char *line = NULL;
+<a href="#l553" class="line" id="l553">    553</a> 	size_t i, itemsiz = 0, linesiz = 0;
+<a href="#l554" class="line" id="l554">    554</a> 	ssize_t len;
+<a href="#l555" class="line" id="l555">    555</a> 
+<a href="#l556" class="line" id="l556">    556</a> 	/* read each line from stdin and add it to the item list */
+<a href="#l557" class="line" id="l557">    557</a> 	for (i = 0; (len = getline(&amp;line, &amp;linesiz, stdin)) != -1; i++) {
+<a href="#l558" class="line" id="l558">    558</a> 		if (i + 1 &gt;= itemsiz) {
+<a href="#l559" class="line" id="l559">    559</a> 			itemsiz += 256;
+<a href="#l560" class="line" id="l560">    560</a> 			if (!(items = realloc(items, itemsiz * sizeof(*items))))
+<a href="#l561" class="line" id="l561">    561</a> 				die(&quot;cannot realloc %zu bytes:&quot;, itemsiz * sizeof(*items));
+<a href="#l562" class="line" id="l562">    562</a> 		}
+<a href="#l563" class="line" id="l563">    563</a> 		if (line[len - 1] == &#39;\n&#39;)
+<a href="#l564" class="line" id="l564">    564</a> 			line[len - 1] = &#39;\0&#39;;
+<a href="#l565" class="line" id="l565">    565</a> 		if (!(items[i].text = strdup(line)))
+<a href="#l566" class="line" id="l566">    566</a> 			die(&quot;strdup:&quot;);
+<a href="#l567" class="line" id="l567">    567</a> 
+<a href="#l568" class="line" id="l568">    568</a> 		items[i].out = 0;
+<a href="#l569" class="line" id="l569">    569</a> 	}
+<a href="#l570" class="line" id="l570">    570</a> 	free(line);
+<a href="#l571" class="line" id="l571">    571</a> 	if (items)
+<a href="#l572" class="line" id="l572">    572</a> 		items[i].text = NULL;
+<a href="#l573" class="line" id="l573">    573</a> 	lines = MIN(lines, i);
+<a href="#l574" class="line" id="l574">    574</a> }
+<a href="#l575" class="line" id="l575">    575</a> 
+<a href="#l576" class="line" id="l576">    576</a> static void
+<a href="#l577" class="line" id="l577">    577</a> run(void)
+<a href="#l578" class="line" id="l578">    578</a> {
+<a href="#l579" class="line" id="l579">    579</a> 	XEvent ev;
+<a href="#l580" class="line" id="l580">    580</a> 
+<a href="#l581" class="line" id="l581">    581</a> 	while (!XNextEvent(dpy, &amp;ev)) {
+<a href="#l582" class="line" id="l582">    582</a> 		if (XFilterEvent(&amp;ev, win))
+<a href="#l583" class="line" id="l583">    583</a> 			continue;
+<a href="#l584" class="line" id="l584">    584</a> 		switch(ev.type) {
+<a href="#l585" class="line" id="l585">    585</a> 		case DestroyNotify:
+<a href="#l586" class="line" id="l586">    586</a> 			if (ev.xdestroywindow.window != win)
+<a href="#l587" class="line" id="l587">    587</a> 				break;
+<a href="#l588" class="line" id="l588">    588</a> 			cleanup();
+<a href="#l589" class="line" id="l589">    589</a> 			exit(1);
+<a href="#l590" class="line" id="l590">    590</a> 		case Expose:
+<a href="#l591" class="line" id="l591">    591</a> 			if (ev.xexpose.count == 0)
+<a href="#l592" class="line" id="l592">    592</a> 				drw_map(drw, win, 0, 0, mw, mh);
+<a href="#l593" class="line" id="l593">    593</a> 			break;
+<a href="#l594" class="line" id="l594">    594</a> 		case FocusIn:
+<a href="#l595" class="line" id="l595">    595</a> 			/* regrab focus from parent window */
+<a href="#l596" class="line" id="l596">    596</a> 			if (ev.xfocus.window != win)
+<a href="#l597" class="line" id="l597">    597</a> 				grabfocus();
+<a href="#l598" class="line" id="l598">    598</a> 			break;
+<a href="#l599" class="line" id="l599">    599</a> 		case KeyPress:
+<a href="#l600" class="line" id="l600">    600</a> 			keypress(&amp;ev.xkey);
+<a href="#l601" class="line" id="l601">    601</a> 			break;
+<a href="#l602" class="line" id="l602">    602</a> 		case SelectionNotify:
+<a href="#l603" class="line" id="l603">    603</a> 			if (ev.xselection.property == utf8)
+<a href="#l604" class="line" id="l604">    604</a> 				paste();
+<a href="#l605" class="line" id="l605">    605</a> 			break;
+<a href="#l606" class="line" id="l606">    606</a> 		case VisibilityNotify:
+<a href="#l607" class="line" id="l607">    607</a> 			if (ev.xvisibility.state != VisibilityUnobscured)
+<a href="#l608" class="line" id="l608">    608</a> 				XRaiseWindow(dpy, win);
+<a href="#l609" class="line" id="l609">    609</a> 			break;
+<a href="#l610" class="line" id="l610">    610</a> 		}
+<a href="#l611" class="line" id="l611">    611</a> 	}
+<a href="#l612" class="line" id="l612">    612</a> }
+<a href="#l613" class="line" id="l613">    613</a> 
+<a href="#l614" class="line" id="l614">    614</a> static void
+<a href="#l615" class="line" id="l615">    615</a> setup(void)
+<a href="#l616" class="line" id="l616">    616</a> {
+<a href="#l617" class="line" id="l617">    617</a> 	int x, y, i, j;
+<a href="#l618" class="line" id="l618">    618</a> 	unsigned int du;
+<a href="#l619" class="line" id="l619">    619</a> 	XSetWindowAttributes swa;
+<a href="#l620" class="line" id="l620">    620</a> 	XIM xim;
+<a href="#l621" class="line" id="l621">    621</a> 	Window w, dw, *dws;
+<a href="#l622" class="line" id="l622">    622</a> 	XWindowAttributes wa;
+<a href="#l623" class="line" id="l623">    623</a> 	XClassHint ch = {&quot;dmenu&quot;, &quot;dmenu&quot;};
+<a href="#l624" class="line" id="l624">    624</a> #ifdef XINERAMA
+<a href="#l625" class="line" id="l625">    625</a> 	XineramaScreenInfo *info;
+<a href="#l626" class="line" id="l626">    626</a> 	Window pw;
+<a href="#l627" class="line" id="l627">    627</a> 	int a, di, n, area = 0;
+<a href="#l628" class="line" id="l628">    628</a> #endif
+<a href="#l629" class="line" id="l629">    629</a> 	/* init appearance */
+<a href="#l630" class="line" id="l630">    630</a> 	for (j = 0; j &lt; SchemeLast; j++)
+<a href="#l631" class="line" id="l631">    631</a> 		scheme[j] = drw_scm_create(drw, colors[j], 2);
+<a href="#l632" class="line" id="l632">    632</a> 
+<a href="#l633" class="line" id="l633">    633</a> 	clip = XInternAtom(dpy, &quot;CLIPBOARD&quot;,   False);
+<a href="#l634" class="line" id="l634">    634</a> 	utf8 = XInternAtom(dpy, &quot;UTF8_STRING&quot;, False);
+<a href="#l635" class="line" id="l635">    635</a> 
+<a href="#l636" class="line" id="l636">    636</a> 	/* calculate menu geometry */
+<a href="#l637" class="line" id="l637">    637</a> 	bh = drw-&gt;fonts-&gt;h + 2;
+<a href="#l638" class="line" id="l638">    638</a> 	lines = MAX(lines, 0);
+<a href="#l639" class="line" id="l639">    639</a> 	mh = (lines + 1) * bh;
+<a href="#l640" class="line" id="l640">    640</a> #ifdef XINERAMA
+<a href="#l641" class="line" id="l641">    641</a> 	i = 0;
+<a href="#l642" class="line" id="l642">    642</a> 	if (parentwin == root &amp;&amp; (info = XineramaQueryScreens(dpy, &amp;n))) {
+<a href="#l643" class="line" id="l643">    643</a> 		XGetInputFocus(dpy, &amp;w, &amp;di);
+<a href="#l644" class="line" id="l644">    644</a> 		if (mon &gt;= 0 &amp;&amp; mon &lt; n)
+<a href="#l645" class="line" id="l645">    645</a> 			i = mon;
+<a href="#l646" class="line" id="l646">    646</a> 		else if (w != root &amp;&amp; w != PointerRoot &amp;&amp; w != None) {
+<a href="#l647" class="line" id="l647">    647</a> 			/* find top-level window containing current input focus */
+<a href="#l648" class="line" id="l648">    648</a> 			do {
+<a href="#l649" class="line" id="l649">    649</a> 				if (XQueryTree(dpy, (pw = w), &amp;dw, &amp;w, &amp;dws, &amp;du) &amp;&amp; dws)
+<a href="#l650" class="line" id="l650">    650</a> 					XFree(dws);
+<a href="#l651" class="line" id="l651">    651</a> 			} while (w != root &amp;&amp; w != pw);
+<a href="#l652" class="line" id="l652">    652</a> 			/* find xinerama screen with which the window intersects most */
+<a href="#l653" class="line" id="l653">    653</a> 			if (XGetWindowAttributes(dpy, pw, &amp;wa))
+<a href="#l654" class="line" id="l654">    654</a> 				for (j = 0; j &lt; n; j++)
+<a href="#l655" class="line" id="l655">    655</a> 					if ((a = INTERSECT(wa.x, wa.y, wa.width, wa.height, info[j])) &gt; area) {
+<a href="#l656" class="line" id="l656">    656</a> 						area = a;
+<a href="#l657" class="line" id="l657">    657</a> 						i = j;
+<a href="#l658" class="line" id="l658">    658</a> 					}
+<a href="#l659" class="line" id="l659">    659</a> 		}
+<a href="#l660" class="line" id="l660">    660</a> 		/* no focused window is on screen, so use pointer location instead */
+<a href="#l661" class="line" id="l661">    661</a> 		if (mon &lt; 0 &amp;&amp; !area &amp;&amp; XQueryPointer(dpy, root, &amp;dw, &amp;dw, &amp;x, &amp;y, &amp;di, &amp;di, &amp;du))
+<a href="#l662" class="line" id="l662">    662</a> 			for (i = 0; i &lt; n; i++)
+<a href="#l663" class="line" id="l663">    663</a> 				if (INTERSECT(x, y, 1, 1, info[i]) != 0)
+<a href="#l664" class="line" id="l664">    664</a> 					break;
+<a href="#l665" class="line" id="l665">    665</a> 
+<a href="#l666" class="line" id="l666">    666</a> 		x = info[i].x_org;
+<a href="#l667" class="line" id="l667">    667</a> 		y = info[i].y_org + (topbar ? 0 : info[i].height - mh);
+<a href="#l668" class="line" id="l668">    668</a> 		mw = info[i].width;
+<a href="#l669" class="line" id="l669">    669</a> 		XFree(info);
+<a href="#l670" class="line" id="l670">    670</a> 	} else
+<a href="#l671" class="line" id="l671">    671</a> #endif
+<a href="#l672" class="line" id="l672">    672</a> 	{
+<a href="#l673" class="line" id="l673">    673</a> 		if (!XGetWindowAttributes(dpy, parentwin, &amp;wa))
+<a href="#l674" class="line" id="l674">    674</a> 			die(&quot;could not get embedding window attributes: 0x%lx&quot;,
+<a href="#l675" class="line" id="l675">    675</a> 			    parentwin);
+<a href="#l676" class="line" id="l676">    676</a> 		x = 0;
+<a href="#l677" class="line" id="l677">    677</a> 		y = topbar ? 0 : wa.height - mh;
+<a href="#l678" class="line" id="l678">    678</a> 		mw = wa.width;
+<a href="#l679" class="line" id="l679">    679</a> 	}
+<a href="#l680" class="line" id="l680">    680</a> 	promptw = (prompt &amp;&amp; *prompt) ? TEXTW(prompt) - lrpad / 4 : 0;
+<a href="#l681" class="line" id="l681">    681</a> 	inputw = mw / 3; /* input width: ~33% of monitor width */
+<a href="#l682" class="line" id="l682">    682</a> 	match();
+<a href="#l683" class="line" id="l683">    683</a> 
+<a href="#l684" class="line" id="l684">    684</a> 	/* create menu window */
+<a href="#l685" class="line" id="l685">    685</a> 	swa.override_redirect = True;
+<a href="#l686" class="line" id="l686">    686</a> 	swa.background_pixel = scheme[SchemeNorm][ColBg].pixel;
+<a href="#l687" class="line" id="l687">    687</a> 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
+<a href="#l688" class="line" id="l688">    688</a> 	win = XCreateWindow(dpy, root, x, y, mw, mh, 0,
+<a href="#l689" class="line" id="l689">    689</a> 	                    CopyFromParent, CopyFromParent, CopyFromParent,
+<a href="#l690" class="line" id="l690">    690</a> 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &amp;swa);
+<a href="#l691" class="line" id="l691">    691</a> 	XSetClassHint(dpy, win, &amp;ch);
+<a href="#l692" class="line" id="l692">    692</a> 
+<a href="#l693" class="line" id="l693">    693</a> 
+<a href="#l694" class="line" id="l694">    694</a> 	/* input methods */
+<a href="#l695" class="line" id="l695">    695</a> 	if ((xim = XOpenIM(dpy, NULL, NULL, NULL)) == NULL)
+<a href="#l696" class="line" id="l696">    696</a> 		die(&quot;XOpenIM failed: could not open input device&quot;);
+<a href="#l697" class="line" id="l697">    697</a> 
+<a href="#l698" class="line" id="l698">    698</a> 	xic = XCreateIC(xim, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+<a href="#l699" class="line" id="l699">    699</a> 	                XNClientWindow, win, XNFocusWindow, win, NULL);
+<a href="#l700" class="line" id="l700">    700</a> 
+<a href="#l701" class="line" id="l701">    701</a> 	XMapRaised(dpy, win);
+<a href="#l702" class="line" id="l702">    702</a> 	if (embed) {
+<a href="#l703" class="line" id="l703">    703</a> 		XReparentWindow(dpy, win, parentwin, x, y);
+<a href="#l704" class="line" id="l704">    704</a> 		XSelectInput(dpy, parentwin, FocusChangeMask | SubstructureNotifyMask);
+<a href="#l705" class="line" id="l705">    705</a> 		if (XQueryTree(dpy, parentwin, &amp;dw, &amp;w, &amp;dws, &amp;du) &amp;&amp; dws) {
+<a href="#l706" class="line" id="l706">    706</a> 			for (i = 0; i &lt; du &amp;&amp; dws[i] != win; ++i)
+<a href="#l707" class="line" id="l707">    707</a> 				XSelectInput(dpy, dws[i], FocusChangeMask);
+<a href="#l708" class="line" id="l708">    708</a> 			XFree(dws);
+<a href="#l709" class="line" id="l709">    709</a> 		}
+<a href="#l710" class="line" id="l710">    710</a> 		grabfocus();
+<a href="#l711" class="line" id="l711">    711</a> 	}
+<a href="#l712" class="line" id="l712">    712</a> 	drw_resize(drw, mw, mh);
+<a href="#l713" class="line" id="l713">    713</a> 	drawmenu();
+<a href="#l714" class="line" id="l714">    714</a> }
+<a href="#l715" class="line" id="l715">    715</a> 
+<a href="#l716" class="line" id="l716">    716</a> static void
+<a href="#l717" class="line" id="l717">    717</a> usage(void)
+<a href="#l718" class="line" id="l718">    718</a> {
+<a href="#l719" class="line" id="l719">    719</a> 	die(&quot;usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor]\n&quot;
+<a href="#l720" class="line" id="l720">    720</a> 	    &quot;             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]&quot;);
+<a href="#l721" class="line" id="l721">    721</a> }
+<a href="#l722" class="line" id="l722">    722</a> 
+<a href="#l723" class="line" id="l723">    723</a> int
+<a href="#l724" class="line" id="l724">    724</a> main(int argc, char *argv[])
+<a href="#l725" class="line" id="l725">    725</a> {
+<a href="#l726" class="line" id="l726">    726</a> 	XWindowAttributes wa;
+<a href="#l727" class="line" id="l727">    727</a> 	int i, fast = 0;
+<a href="#l728" class="line" id="l728">    728</a> 
+<a href="#l729" class="line" id="l729">    729</a> 	for (i = 1; i &lt; argc; i++)
+<a href="#l730" class="line" id="l730">    730</a> 		/* these options take no arguments */
+<a href="#l731" class="line" id="l731">    731</a> 		if (!strcmp(argv[i], &quot;-v&quot;)) {      /* prints version information */
+<a href="#l732" class="line" id="l732">    732</a> 			puts(&quot;dmenu-&quot;VERSION);
+<a href="#l733" class="line" id="l733">    733</a> 			exit(0);
+<a href="#l734" class="line" id="l734">    734</a> 		} else if (!strcmp(argv[i], &quot;-b&quot;)) /* appears at the bottom of the screen */
+<a href="#l735" class="line" id="l735">    735</a> 			topbar = 0;
+<a href="#l736" class="line" id="l736">    736</a> 		else if (!strcmp(argv[i], &quot;-f&quot;))   /* grabs keyboard before reading stdin */
+<a href="#l737" class="line" id="l737">    737</a> 			fast = 1;
+<a href="#l738" class="line" id="l738">    738</a> 		else if (!strcmp(argv[i], &quot;-i&quot;)) { /* case-insensitive item matching */
+<a href="#l739" class="line" id="l739">    739</a> 			fstrncmp = strncasecmp;
+<a href="#l740" class="line" id="l740">    740</a> 			fstrstr = cistrstr;
+<a href="#l741" class="line" id="l741">    741</a> 		} else if (i + 1 == argc)
+<a href="#l742" class="line" id="l742">    742</a> 			usage();
+<a href="#l743" class="line" id="l743">    743</a> 		/* these options take one argument */
+<a href="#l744" class="line" id="l744">    744</a> 		else if (!strcmp(argv[i], &quot;-l&quot;))   /* number of lines in vertical list */
+<a href="#l745" class="line" id="l745">    745</a> 			lines = atoi(argv[++i]);
+<a href="#l746" class="line" id="l746">    746</a> 		else if (!strcmp(argv[i], &quot;-m&quot;))
+<a href="#l747" class="line" id="l747">    747</a> 			mon = atoi(argv[++i]);
+<a href="#l748" class="line" id="l748">    748</a> 		else if (!strcmp(argv[i], &quot;-p&quot;))   /* adds prompt to left of input field */
+<a href="#l749" class="line" id="l749">    749</a> 			prompt = argv[++i];
+<a href="#l750" class="line" id="l750">    750</a> 		else if (!strcmp(argv[i], &quot;-fn&quot;))  /* font or font set */
+<a href="#l751" class="line" id="l751">    751</a> 			fonts[0] = argv[++i];
+<a href="#l752" class="line" id="l752">    752</a> 		else if (!strcmp(argv[i], &quot;-nb&quot;))  /* normal background color */
+<a href="#l753" class="line" id="l753">    753</a> 			colors[SchemeNorm][ColBg] = argv[++i];
+<a href="#l754" class="line" id="l754">    754</a> 		else if (!strcmp(argv[i], &quot;-nf&quot;))  /* normal foreground color */
+<a href="#l755" class="line" id="l755">    755</a> 			colors[SchemeNorm][ColFg] = argv[++i];
+<a href="#l756" class="line" id="l756">    756</a> 		else if (!strcmp(argv[i], &quot;-sb&quot;))  /* selected background color */
+<a href="#l757" class="line" id="l757">    757</a> 			colors[SchemeSel][ColBg] = argv[++i];
+<a href="#l758" class="line" id="l758">    758</a> 		else if (!strcmp(argv[i], &quot;-sf&quot;))  /* selected foreground color */
+<a href="#l759" class="line" id="l759">    759</a> 			colors[SchemeSel][ColFg] = argv[++i];
+<a href="#l760" class="line" id="l760">    760</a> 		else if (!strcmp(argv[i], &quot;-w&quot;))   /* embedding window id */
+<a href="#l761" class="line" id="l761">    761</a> 			embed = argv[++i];
+<a href="#l762" class="line" id="l762">    762</a> 		else
+<a href="#l763" class="line" id="l763">    763</a> 			usage();
+<a href="#l764" class="line" id="l764">    764</a> 
+<a href="#l765" class="line" id="l765">    765</a> 	if (!setlocale(LC_CTYPE, &quot;&quot;) || !XSupportsLocale())
+<a href="#l766" class="line" id="l766">    766</a> 		fputs(&quot;warning: no locale support\n&quot;, stderr);
+<a href="#l767" class="line" id="l767">    767</a> 	if (!(dpy = XOpenDisplay(NULL)))
+<a href="#l768" class="line" id="l768">    768</a> 		die(&quot;cannot open display&quot;);
+<a href="#l769" class="line" id="l769">    769</a> 	screen = DefaultScreen(dpy);
+<a href="#l770" class="line" id="l770">    770</a> 	root = RootWindow(dpy, screen);
+<a href="#l771" class="line" id="l771">    771</a> 	if (!embed || !(parentwin = strtol(embed, NULL, 0)))
+<a href="#l772" class="line" id="l772">    772</a> 		parentwin = root;
+<a href="#l773" class="line" id="l773">    773</a> 	if (!XGetWindowAttributes(dpy, parentwin, &amp;wa))
+<a href="#l774" class="line" id="l774">    774</a> 		die(&quot;could not get embedding window attributes: 0x%lx&quot;,
+<a href="#l775" class="line" id="l775">    775</a> 		    parentwin);
+<a href="#l776" class="line" id="l776">    776</a> 	drw = drw_create(dpy, screen, root, wa.width, wa.height);
+<a href="#l777" class="line" id="l777">    777</a> 	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
+<a href="#l778" class="line" id="l778">    778</a> 		die(&quot;no fonts could be loaded.&quot;);
+<a href="#l779" class="line" id="l779">    779</a> 	lrpad = drw-&gt;fonts-&gt;h;
+<a href="#l780" class="line" id="l780">    780</a> 
+<a href="#l781" class="line" id="l781">    781</a> #ifdef __OpenBSD__
+<a href="#l782" class="line" id="l782">    782</a> 	if (pledge(&quot;stdio rpath&quot;, NULL) == -1)
+<a href="#l783" class="line" id="l783">    783</a> 		die(&quot;pledge&quot;);
+<a href="#l784" class="line" id="l784">    784</a> #endif
+<a href="#l785" class="line" id="l785">    785</a> 
+<a href="#l786" class="line" id="l786">    786</a> 	if (fast &amp;&amp; !isatty(0)) {
+<a href="#l787" class="line" id="l787">    787</a> 		grabkeyboard();
+<a href="#l788" class="line" id="l788">    788</a> 		readstdin();
+<a href="#l789" class="line" id="l789">    789</a> 	} else {
+<a href="#l790" class="line" id="l790">    790</a> 		readstdin();
+<a href="#l791" class="line" id="l791">    791</a> 		grabkeyboard();
+<a href="#l792" class="line" id="l792">    792</a> 	}
+<a href="#l793" class="line" id="l793">    793</a> 	setup();
+<a href="#l794" class="line" id="l794">    794</a> 	run();
+<a href="#l795" class="line" id="l795">    795</a> 
+<a href="#l796" class="line" id="l796">    796</a> 	return 1; /* unreachable */
+<a href="#l797" class="line" id="l797">    797</a> }
+</pre>
+</div>
+</body>
+</html>
