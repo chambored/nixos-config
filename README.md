@@ -13,13 +13,15 @@ This repository contains my personal [NixOS](https://nixos.org/) configuration, 
   - `st/`: Overlay for the simple terminal [st](https://st.suckless.org/).
   - `slock/`: Overlay for the simple screen locker [slock](https://tools.suckless.org/slock/).
   - `slstatus/`: Overlay for the status monitor [slstatus](https://tools.suckless.org/slstatus/).
+- `dots/`: Contains current dotfiles
+- `scripts/`: Contains some utility scripts
 
 ## Usage
 
 Clone this repository to your local machine, and symbolic link the `configuration.nix` file to your `/etc/nixos/` directory.
 
 ```bash
-git clone https://github.com/username/reponame.git
+git clone https://github.com/chambored/nixos-config.git
 sudo ln -s /path/to/reponame/configuration.nix /etc/nixos/configuration.nix
 ```
 
