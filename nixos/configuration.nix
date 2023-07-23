@@ -21,7 +21,8 @@
   networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
 
   # Set your time zone.
-  time.timeZone = "America/Seattle";
+  time.timeZone = "America/Los_Angeles";
+  services.ntp.enable = true;
 
   # Configure network proxy if necessary
   # networking.proxy.default = "http://user:password@proxy:port/";
