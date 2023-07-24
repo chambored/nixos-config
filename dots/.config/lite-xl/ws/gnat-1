@@ -1,0 +1,1 @@
+return { path = "/home/gnat", documents = {["active_view"]=1,["type"]="leaf",["views"]={[1]={["selection"]={[1]=7,[2]=8,[3]=7,[4]=8},["scroll"]={["y"]=0,["x"]=0},["type"]="doc",["filename"]="Data/Personal/Projects/WebDev/current sites/gnatblog/posts/0001.md",["text"]=false,["active"]=true}}}, directories = {} }
