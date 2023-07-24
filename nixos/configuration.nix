@@ -61,15 +61,16 @@
     extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
     packages = with pkgs; [
       _1password-gui
-      firefox
-      tree
-      feh
-      dwm
-      st
       dmenu
+      dwm
+      feh
+      firefox
+      lite-xl
       slstatus
+      st
       syncthing
-    ];
+      tree
+     ];
   };
 
   nixpkgs.overlays = [
