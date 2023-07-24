@@ -18,5 +18,6 @@ alias l='command ls -Av1h --color=always --time-style=long-iso --group-directori
     # -v: verbose
 PS1='[\u@\h \W]\$ '
 
-alias abstract="startx"
 alias upcon="./updateConfigs.sh"
+
+export GPG_TTY=$(tty)
