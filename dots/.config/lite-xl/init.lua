@@ -25,7 +25,7 @@ local style = require "core.style"
 
 -- customize fonts:
 style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 14 * SCALE)
-style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 14 * SCALE)
+style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 14)
 --
 -- DATADIR is the location of the installed Lite XL Lua code, default color
 -- schemes and fonts.

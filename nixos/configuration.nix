@@ -67,6 +67,7 @@
       firefox
       gnupg
       lite-xl
+      marktext
       pinentry
       python3
       slstatus

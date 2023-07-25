@@ -1,0 +1,6 @@
+1password
+firefox
+lite-xl
+marktext
+syncthing
+vlc

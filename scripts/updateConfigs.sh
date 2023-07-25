@@ -11,7 +11,6 @@ declare -A files=(
   ["$HOME/.vimrc"]="$HOME/Data/.cfg/dots/.vimrc"
   ["/etc/nixos/configuration.nix"]="$HOME/Data/.cfg/nixos/configuration.nix"
   ["/etc/nixos/hardware-configuration.nix"]="$HOME/Data/.cfg/nixos/hardware-configuration.nix"
-  ["$HOME/updateConfigs.sh"]="$HOME/Data/.cfg/scripts/updateConfigs.sh"
 )
 
 # Initialize a flag to keep track of if all the copy operations are successful
