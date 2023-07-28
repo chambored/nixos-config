@@ -1,6 +1,9 @@
 1password
 firefox
+flameshot
 lite-xl
 marktext
+pavucontrol
+spotify
 syncthing
 vlc

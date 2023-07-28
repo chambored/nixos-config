@@ -65,7 +65,8 @@ static const char unknown_str[] = "n/a";
  */
 static const struct arg args[] = {
 	/* function format          argument */
-	{ run_command, "VOL: %s | ", "pactl list sinks | awk '/^\\sVolume:/{print $5}'"},
+	( uptime, "UPTIME: %s | ", NULL},
+	{ run_command, "VOL: %s | ", "echo foo"},
 	{ ram_used, "RAM: %s | ", NULL},
 	{ wifi_essid, "%s | ", "wlo1"},
 	{ battery_perc, "%s%%",   	"BAT0"},

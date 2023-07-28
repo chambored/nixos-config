@@ -65,12 +65,15 @@
       dwm
       feh
       firefox
+      flameshot
       gnupg
       lite-xl
       marktext
+      pavucontrol
       pinentry
       python3
-      slstatus
+      slstatus 
+      spotify
       st
       syncthing
       tree
@@ -96,6 +99,7 @@
     neofetch
     mariadb
     terminus_font
+    tldr
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
