@@ -4,7 +4,10 @@
 # Each key-value pair in the array represents a source-target relationship
 # If a key is a directory, its value should be a directory as well
 declare -A files=(
-  ["$HOME/.config/lite-xl/"]="$HOME/Data/.cfg/dots/.config/"
+  ["$HOME/.config/lite-xl/colors"]="$HOME/Data/.cfg/dots/.config/lite-xl/colors"
+  ["$HOME/.config/lite-xl/fonts"]="$HOME/Data/.cfg/dots/.config/lite-xl/fonts"
+  ["$HOME/.config/lite-xl/init.lua"]="$HOME/Data/.cfg/dots/.config/lite-xl/init.lua"
+  ["$HOME/.config/lite-xl/plugins"]="$HOME/Data/.cfg/dots/.config/lite-xl/plugins"
   ["$HOME/.dwm/autostart.sh"]="$HOME/Data/.cfg/dots/.dwm/autostart.sh"
   ["$HOME/.xinitrc"]="$HOME/Data/.cfg/dots/.xinitrc"
   ["$HOME/.bashrc"]="$HOME/Data/.cfg/dots/.bashrc"

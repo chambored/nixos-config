@@ -31,9 +31,10 @@
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
-    font = "Lat2-Terminus16";
+    packages=[ pkgs.terminus_font ];
+    font="${pkgs.terminus_font}/share/consolefonts/ter-i22b.psf.gz";
     useXkbConfig = true; # use xkbOptions in tty.
-  };
+  }; 
 
   # Enable the X11 windowing system.
   services.xserver.enable = true;
@@ -66,18 +67,22 @@
       feh
       firefox
       flameshot
+      gimp-with-plugins
       gnupg
+      jetbrains.idea-ultimate
       lite-xl
       marktext
       pavucontrol
       pinentry
       python3
+      slack
       slstatus 
       spotify
       st
       syncthing
       tree
       vlc
+      zathura
      ];
   };
 
@@ -98,7 +103,6 @@
     git
     neofetch
     mariadb
-    terminus_font
     tldr
   ];
 

@@ -1,9 +1,13 @@
 1password
 firefox
 flameshot
+gimp
+idea-ultimate
 lite-xl
 marktext
 pavucontrol
+slack
 spotify
 syncthing
 vlc
+zathura
