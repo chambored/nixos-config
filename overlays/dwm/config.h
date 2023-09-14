@@ -83,7 +83,7 @@ static const Layout layouts[] = {
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
 /* commands */
-static const char *dmenucmd[] = { "/home/gnat/Data/.cfg/scripts/dmenu_custom.sh", "-fn", dmenufont, "-nb", col_cream, "-nf", col_gray3, "-sb", col_gray2, "-sf", col_gyellow, NULL };
+static const char *dmenucmd[] = { "/home/gnat/data/.cfg/scripts/dmenu_custom.sh", "-fn", dmenufont, "-nb", col_cream, "-nf", col_gray3, "-sb", col_gray2, "-sf", col_gyellow, NULL };
 static const char *termcmd[]  = { "st", NULL };
 static const char *mutecmd[]  = { "pactl", "set-sink-mute", "0", "toggle", NULL};
 static const char *volupcmd[] = { "pactl", "set-sink-volume", "0", "+5%", NULL};

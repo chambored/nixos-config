@@ -22,6 +22,11 @@
     { device = "/dev/disk/by-uuid/5526-240E";
       fsType = "vfat";
     };
+  fileSystems."/home/gnat/data" = 
+    { device = "/dev/disk/by-uuid/df2bf453-08fc-4393-9a64-88fbaac87e79";
+      fsType = "btrfs";
+      options = [ "compress=lzo" "space_cache=v2" "noatime" ];
+    };
 
   swapDevices =
     [ { device = "/dev/disk/by-uuid/ef9b7213-e7e2-4ccc-9536-f84e1ef5aa23"; }

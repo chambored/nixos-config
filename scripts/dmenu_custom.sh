@@ -1,7 +1,16 @@
 #!/run/current-system/sw/bin/bash
 
-choice=$(cat ~/Data/.cfg/overlays/dmenu/programs.txt | dmenu -i)
+choice=$(cat ~/data/.cfg/overlays/dmenu/programs.txt | dmenu -i)
 
-if [ "$choice" != "" ]; then
-  $choice &
+if [ -n "$choice" ]; then
+  if [[ $choice == TUI:* ]]; then
+    cmd=${choice#TUI:}
+    st -e "$cmd" &
+  elif [[ $choice == CLI:* ]]; then
+    cmd=${choice#CLI:}
+    st -e sh -c "tldr $cmd || ($cmd --help | less)" 2>>~/dmenu_error.log &
+  else
+    $choice &
+  fi
 fi
+

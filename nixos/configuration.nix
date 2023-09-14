@@ -62,19 +62,31 @@
     extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
     packages = with pkgs; [
       _1password-gui
+      aspell
+      aspellDicts.en
+      calcurse
       dmenu
       dwm
       feh
       firefox
       flameshot
+      freecad
       gimp-with-plugins
       gnupg
+      inkscape
       jetbrains.idea-ultimate
+      joshuto
+      lapce
+      librewolf
       lite-xl
       marktext
+      obsidian
       pavucontrol
       pinentry
+      proselint
       python3
+      runelite
+      simplescreenrecorder
       slack
       slstatus 
       spotify
@@ -82,22 +94,26 @@
       syncthing
       tree
       vlc
+      unzip
+      xclip
       zathura
+      zip
      ];
   };
 
   nixpkgs.overlays = [
     (final: prev: {
-      dwm = prev.dwm.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/dwm; });
-      dmenu = prev.dmenu.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/dmenu; });
-      slstatus = prev.slstatus.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/slstatus; });
-      st = prev.st.overrideAttrs (old: { src = /home/gnat/Data/.cfg/overlays/st; });
+      dwm = prev.dwm.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/dwm; });
+      dmenu = prev.dmenu.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/dmenu; });
+      slstatus = prev.slstatus.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/slstatus; });
+      st = prev.st.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/st; });
     })
   ];
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
+    btrfs-progs
     vim
     wget
     git
@@ -117,7 +133,7 @@
   # List services that you want to enable:
 
   # Enable the OpenSSH daemon.
-  # services.openssh.enable = true;
+  services.openssh.enable = true;
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];

@@ -19,6 +19,22 @@ alias l='command ls -Av1h --color=always --time-style=long-iso --group-directori
 PS1='[\u@\h \W]\$ '
 
 alias upcon="updateConfigs.sh"
-
+alias tidyhere="./tidy_all.sh"
+alias feh="feh -."
 export GPG_TTY=$(tty)
-export PATH="$HOME/Data/.cfg/scripts:$PATH"
+export PATH="$HOME/data/.cfg/scripts:$PATH"
+
+export HISTCONTROL=ignoreboth:erasedups
+shopt -s histappend
+
+join() {
+    if [[ $# -ne 2 ]]; then
+        echo "Usage: join <network_name> <password>"
+        return 1
+    fi
+    
+    local ssid="$1"
+    local password="$2"
+
+    nmcli device wifi connect "$ssid" password "$password"
+}
