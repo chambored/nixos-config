@@ -21,6 +21,7 @@ PS1='[\u@\h \W]\$ '
 alias upcon="updateConfigs.sh"
 alias tidyhere="./tidy_all.sh"
 alias feh="feh -."
+alias bruno='appimage-run ~/data/appimages/bruno_1.1.0_x86_64_linux.AppImage'
 export GPG_TTY=$(tty)
 export PATH="$HOME/data/.cfg/scripts:$PATH"
 
@@ -36,5 +37,5 @@ join() {
     local ssid="$1"
     local password="$2"
 
-    nmcli device wifi connect "$ssid" password "$password"
+    sudo nmcli device wifi connect "$ssid" password "$password"
 }

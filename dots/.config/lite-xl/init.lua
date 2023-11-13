@@ -10,7 +10,8 @@ local style = require "core.style"
 ------------------------------ Themes ----------------------------------------
 
 -- light theme:
--- core.reload_module("colors.summer")
+-- core.reload_module("colors.solarobj")
+core.reload_module("colors.flexoki_light")
 
 --------------------------- Key bindings -------------------------------------
 

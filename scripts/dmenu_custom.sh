@@ -9,6 +9,9 @@ if [ -n "$choice" ]; then
   elif [[ $choice == CLI:* ]]; then
     cmd=${choice#CLI:}
     st -e sh -c "tldr $cmd || ($cmd --help | less)" 2>>~/dmenu_error.log &
+  elif [[ $choice == APPIMG:* ]]; then
+    appimg=${choice#APPIMG:}
+    appimage-run "$appimg" &
   else
     $choice &
   fi

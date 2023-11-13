@@ -4,6 +4,12 @@
 
 { config, pkgs, ... }:
 
+# allows for unstable packages to be declared
+let
+  unstableTarball =
+    fetchTarball
+      https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz;
+in
 {
   imports =
     [ # Include the results of the hardware scan.
@@ -48,12 +54,23 @@
   # Enable CUPS to print documents.
   # services.printing.enable = true;
 
-  # Enable sound.
+  # Enable sound and bluetooth services.
   sound.enable = true;
   hardware.pulseaudio.enable = true;
+  hardware.bluetooth.enable = true;
+  services.blueman.enable = true;
 
   # Enable touchpad support (enabled default in most desktopManager).
   # services.xserver.libinput.enable = true;
+
+  # allows for unstable packages to be declared prefixed with 'unstable.'
+  nixpkgs.config = {
+    packageOverrides = pkgs: {
+      unstable = import unstableTarball {
+        config = config.nixpkgs.config;
+      };
+    };
+  };
 
   nixpkgs.config.allowUnfree = true;
   # Define a user account. Don't forget to set a password with ‘passwd’.
@@ -61,43 +78,73 @@
     isNormalUser = true;
     extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
     packages = with pkgs; [
-      _1password-gui
-      aspell
-      aspellDicts.en
-      calcurse
-      dmenu
-      dwm
-      feh
-      firefox
-      flameshot
-      freecad
-      gimp-with-plugins
-      gnupg
-      inkscape
-      jetbrains.idea-ultimate
-      joshuto
-      lapce
-      librewolf
-      lite-xl
-      marktext
-      obsidian
-      pavucontrol
-      pinentry
-      proselint
-      python3
-      runelite
-      simplescreenrecorder
-      slack
-      slstatus 
-      spotify
-      st
-      syncthing
-      tree
-      vlc
-      unzip
-      xclip
-      zathura
-      zip
+      _1password-gui # Multi-platform password manager
+      appimage-run
+      aspell # Spell checker for many languages
+      aspellDicts.en # Aspell dictionary for English
+      brightnessctl # This program allows you read and control device brightness
+      calcurse # A calendar and scheduling application for the command line
+      csview # A high performance csv viewer with cjk/emoji support
+      dmenu # A generic, highly customizable, and efficient menu for the X Window System
+      dwm # An extremely fast, small, and dynamic window manager for X
+      feh # A light-weight image viewer
+      firefox # A web browser built from Firefox source tree
+      flameshot # Powerful yet simple to use screenshot software
+      foliate # A simple and modern GTK eBook reader
+      freecad # General purpose Open Source 3D CAD/MCAD/CAx/CAE/PLM modeler
+      gimp-with-plugins # The GNU Image Manipulation Program
+      gcc # GNU Compiler Collection, version 12.2.0 (wrapper script)
+      glow # Render markdown on the CLI, with pizzazz!
+      gnumake # A tool to control the generation of non-source files from sources
+      gnupg # Modern release of the GNU Privacy Guard, a GPL OpenPGP implementation
+      go-sct # Color temperature setting library and CLI that operates in a similar way to f.lux and Redshift
+      hollywood # Fill your console with Hollywood melodrama technobabble
+      inkscape # Vector graphics editor
+      jetbrains-toolbox # Jetbrains Toolbox
+      lapce # Lightning-fast and Powerful Code Editor written in Rust
+      librewolf # A fork of Firefox, focused on privacy, security and freedom
+      lite-xl # A lightweight text editor written in Lua
+      lua # Powerful, fast, lightweight, embeddable scripting language
+      marktext # A simple and elegant markdown editor, available for Linux, macOS and Windows
+      minicom # Modem control and terminal emulation program
+      mods # AI on the command line
+      mongosh
+      # Obsidian causing EOL error from Electron-24.8.6
+      # obsidian # A powerful knowledge base that works on top of a local folder of plain text Markdown files
+      openra # Open-source re-implementation of Westwood Studios' 2D Command and Conquer games
+      openssl # A cryptographic library that implements the SSL and TLS protocols
+      openssl.dev
+      pavucontrol # PulseAudio Volume Control
+      pciutils # A collection of programs for inspecting and manipulating configuration of PCI devices
+      perl # The standard implementation of the Perl 5 programming language
+      pkg-config # A tool that allows packages to find out information about other packages (wrapper script)
+      pinentry # GnuPG’s interface to passphrase input
+      proselint # A linter for prose
+      python3 # A high-level dynamically-typed programming language
+      rustup # The Rust toolchain installer
+      simplescreenrecorder # A screen recorder for Linux
+      scribus # Desktop Publishing (DTP) and Layout program for Linux
+      session-desktop # Onion routing based messenger
+      slack # Desktop client for Slack
+      # slstatus # status monitor for window managers that use WM_NAME like dwm
+      ssh-audit # Tool for ssh server auditing
+      spotify # Play music from the Spotify music service
+      st # Simple Terminal for X from Suckless.org Community
+      syncthing # Open Source Continuous File Synchronization
+      tree # Command to produce a depth indented directory listing
+      unzip # An extraction utility for archives compressed in .zip format
+      vlc # Cross-platform media player and streaming server
+      watson 
+      wireshark # Powerful network protocol analyzer
+      xclip # Tool to access the X clipboard from a console application
+      zathura # Tool to access the X clipboard from a console application
+      zoom-us # zoom.us video conferencing application
+      zip # Compressor/archiver for creating and modifying zipfiles
+
+      #yazi needs:
+      unstable.yazi # Blazing fast terminal file manager written in Rust, based on async I/O
+      ffmpegthumbnailer # A lightweight video thumbnailer
+      poppler # A PDF rendering library
      ];
   };
 
@@ -105,7 +152,7 @@
     (final: prev: {
       dwm = prev.dwm.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/dwm; });
       dmenu = prev.dmenu.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/dmenu; });
-      slstatus = prev.slstatus.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/slstatus; });
+      # slstatus = prev.slstatus.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/slstatus; });
       st = prev.st.overrideAttrs (old: { src = /home/gnat/data/.cfg/overlays/st; });
     })
   ];
@@ -113,13 +160,13 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    btrfs-progs
-    vim
-    wget
-    git
-    neofetch
-    mariadb
-    tldr
+    btrfs-progs # Utilities for the btrfs filesystem
+    vim # The most popular clone of the VI editor
+    wget # Tool for retrieving files using HTTP, HTTPS, and FTP
+    git # Distributed version control system
+    neofetch # A fast, highly customizable system info script
+    mariadb # An enhanced, drop-in replacement for MySQL
+    tldr # Simplified and community-driven man pages
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
@@ -136,7 +183,7 @@
   services.openssh.enable = true;
 
   # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
+  # networking.firewall.allowedTCPPorts = [ 1234 ];
   # networking.firewall.allowedUDPPorts = [ ... ];
   # Or disable the firewall altogether.
   # networking.firewall.enable = false;
